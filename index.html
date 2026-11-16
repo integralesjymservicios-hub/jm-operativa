@@ -67,6 +67,8 @@ input[type=text],input[type=tel],input[type=date],input[type=time],input[type=pa
 textarea{min-height:80px;resize:vertical}
 .mono{font-family:var(--f-mono)}
 .code{font:600 13px var(--f-mono);background:var(--sunk);padding:2px 7px;border-radius:5px}
+.oculto{display:none!important}
+.buscador{gap:10px;align-items:center}.buscador input{flex:1 1 240px}
 .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
 .chk{display:flex;gap:8px;align-items:center;padding:9px 10px;border:1px solid var(--line);border-radius:9px;cursor:pointer;font-size:14px}
 .chk input{accent-color:var(--brand);width:18px;height:18px}
@@ -427,8 +429,9 @@ function vComs(){
   return'<div class="kpis num"><div class="kpi"><div class="v">'+hoy.length+'</div><div class="l">Rondas hoy</div></div><div class="kpi"><div class="v">'+hoy.filter(function(r){return r.estado==='Completa'}).length+'</div><div class="l">Completas hoy</div></div>'+
     '<div class="kpi"><div class="v">'+OF.rondas.filter(function(r){return r.estado==='En curso'}).length+'</div><div class="l">En curso ahora</div></div><div class="kpi"><div class="v">'+OF.partes.filter(function(p){return dayOf(p.fecha)===today()}).length+'</div><div class="l">Partes hoy</div></div></div>'+
   '<div class="sec-h"><h2>Comunidades</h2>'+(OF.carpeta?'<a class="small" href="'+esc(OF.carpeta)+'" target="_blank" rel="noopener">Carpeta de hojas en Drive</a>':'')+'</div>'+
+  (OF.com.length>8?buscador('com','Buscar comunidad: calle, nombre, localidad o prefijo'):'')+
   (OF.com.length?'<div class="grid">'+OF.com.map(function(c){var r=OF.rondas.find(function(x){return x.comunidadId===c.id});var ph=OF.partes.filter(function(p){return p.comunidadId===c.id&&dayOf(p.fecha)===today()}).length;
-      return'<button class="tile" data-act="com" data-id="'+c.id+'"><h3>'+esc(c.nombre)+'</h3><span class="small muted">'+esc(c.localidad||'')+(c.localidad?' · ':'')+ptsOf(c.id,OF.pts).length+' puntos</span>'+
+      return'<button class="tile" data-act="com" data-id="'+c.id+'"'+qAttr('com',c.nombre+' '+(c.localidad||'')+' '+c.prefijo)+'><h3>'+esc(c.nombre)+'</h3><span class="small muted">'+esc(c.localidad||'')+(c.localidad?' · ':'')+ptsOf(c.id,OF.pts).length+' puntos</span>'+
       '<span class="row" style="gap:6px">'+(r?estadoPill(r)+(dayOf(r.inicio)!==today()&&r.estado!=='En curso'?'<span class="pill p-none">Hoy sin ronda</span>':''):'<span class="pill p-none">Sin rondas</span>')+(ph?'<span class="pill p-run">'+ph+' parte'+(ph>1?'s':'')+' hoy</span>':'')+'</span>'+
       '<span class="small muted num">'+(r?'Última: '+fD(r.inicio)+', '+fT(r.inicio)+' · '+esc(r.trabajador):'Ninguna ronda todavía')+'</span></button>'}).join('')+'</div>'
     :'<div class="card empty"><b>Aún no hay comunidades</b>Crea la primera aquí debajo.</div>')+
@@ -473,8 +476,7 @@ function vComDet(){
   if(t==='partes')body=D?listaPartes(D.partes,false):'';
   else if(t==='puntos')body=(pts.length?'<div>'+pts.map(function(p){return'<div class="prow"><span class="code">'+esc(p.codigo)+'</span><span>'+esc(p.nombre)+'</span>'+delBtn('delPt',p.id,'Quitar')+'</div>'}).join('')+'</div>':'<p class="small muted" style="margin:0">Añade los puntos de la ronda en el orden del recorrido.</p>')+
       '<form class="row" data-form="pt" data-id="'+c.id+'" autocomplete="off"><label class="f" style="flex:1 1 220px">Nuevo punto<input type="text" id="np-'+c.id+'" placeholder="Ej. Garaje −1, puerta de acceso"></label><button class="btn pri" style="align-self:flex-end">Añadir punto</button></form>'+
-      (pts.length?'<div><button class="btn" data-act="labels">'+(S.labels?'Ocultar etiquetas':'Ver etiquetas QR / NFC')+'</button></div>':'')+(S.labels&&pts.length?vLabels(c,pts):'')+
-      '<div style="border-top:1px solid var(--line);padding-top:12px">'+delBtn('delCom',c.id,'Quitar esta comunidad de la app')+'<p class="small muted" style="margin:6px 0 0">Su hoja de cálculo se conserva en Drive.</p></div>';
+      (pts.length?'<div><button class="btn" data-act="labels">'+(S.labels?'Ocultar etiquetas':'Ver etiquetas QR / NFC')+'</button></div>':'')+(S.labels&&pts.length?vLabels(c,pts):'');
   else if(t==='visitas')body=D?listaVisitas(D.visitas):'';
   else if(t==='incidencias')body=D?listaIncidencias(D.incidencias):'';
   else if(t==='tareas'){var tl=c.tareasLista||[];
@@ -490,7 +492,9 @@ function vComDet(){
     '<section class="card stack"><div class="sec-h"><div><h2 style="font-size:22px;color:var(--brand)">'+esc(c.nombre)+'</h2><div class="small muted">'+esc(c.localidad||'')+(c.localidad?' · ':'')+'Prefijo <span class="code">'+esc(c.prefijo)+'</span> · '+pts.length+' puntos</div>'+
     (function(){var q=OF.trab.filter(function(t){var a=String(t.comunidades||'');return String(t.activo).toUpperCase()!=='NO'&&(a==='*'||a.split('|').indexOf(c.id)>=0)}).map(function(t){return t.nombre});return'<div class="small muted">Trabajan aquí: '+(q.length?esc(q.join(', ')):'<b style="color:var(--pink)">nadie asignado</b>')+'</div>'})()+'</div>'+
     (c.hojaUrl?'<a class="btn pink" href="'+esc(c.hojaUrl)+'" target="_blank" rel="noopener">Abrir hoja de esta comunidad</a>':'')+'</div>'+
-    '<nav class="subtabs">'+[['rondas','Rondas'],['partes','Partes de trabajo'],['visitas','Visitas externas'],['incidencias','Incidencias'],['puntos','Puntos y etiquetas'],['tareas','Tareas del parte']].map(function(x){return'<button data-act="comTab" data-v="'+x[0]+'" '+(t===x[0]?'aria-current="page"':'')+'>'+x[1]+'</button>'}).join('')+'</nav>'+body+'</section>';
+    '<nav class="subtabs">'+[['rondas','Rondas'],['partes','Partes de trabajo'],['visitas','Visitas externas'],['incidencias','Incidencias'],['puntos','Puntos y etiquetas'],['tareas','Tareas del parte']].map(function(x){return'<button data-act="comTab" data-v="'+x[0]+'" '+(t===x[0]?'aria-current="page"':'')+'>'+x[1]+'</button>'}).join('')+'</nav>'+body+'</section>'+
+    '<section class="card stack"><h2 style="font-size:17px">Eliminar comunidad</h2><p class="small muted" style="margin:0">Si ya no dais servicio aquí: desaparece de la app, de los trabajadores que la tenían asignada y del acceso de clientes. Su hoja de cálculo, con todo el histórico, se conserva en Drive.</p>'+
+    '<div>'+delBtn('delCom',c.id,'Eliminar esta comunidad')+'</div></section>';
 }
 function delBtn(act,id,txt){var k=act+':'+id,armed=S.confirm===k;return'<button class="btn danger small '+(armed?'armed':'')+'" data-act="'+act+'" data-id="'+id+'">'+(armed?'Pulsa otra vez para confirmar':txt)+'</button>'}
 function linkFor(p){return APPURL+'?p='+encodeURIComponent(p.codigo)}
@@ -504,11 +508,20 @@ function vLabels(c,pts){
     (saved?'<div class="banner b-info">Hoja guardada en tu Drive: <a href="'+esc(saved)+'" target="_blank" rel="noopener">abrir e imprimir</a></div>':'')+
     '<div class="labels">'+pts.map(function(p){return'<div class="label">'+qrSvg(linkFor(p))+'<b style="font-size:13px">'+esc(p.nombre)+'</b><span class="code">'+esc(p.codigo)+'</span><span class="u">'+esc(linkFor(p))+'</span><button class="btn small ghost" data-act="copy" data-txt="'+esc(linkFor(p))+'">Copiar enlace NFC</button></div>'}).join('')+'</div></div>';
 }
+/* ---------- buscador de la oficina: oculta lo que no coincide (no borra nada del formulario) ---------- */
+function nq(s){return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
+function buscador(k,ph){return'<div class="row buscador"><input type="search" id="q-'+k+'" data-filtro="'+k+'" placeholder="'+esc(ph)+'" autocomplete="off" aria-label="'+esc(ph)+'"><span class="small muted num" id="qn-'+k+'"></span></div>'}
+function qAttr(k,txt){return' data-f="'+k+'" data-q="'+esc(nq(txt))+'"'}
+function filtrar(k){var inp=document.getElementById('q-'+k),w=nq(inp?inp.value:'').split(/\s+/).filter(Boolean),els=document.querySelectorAll('[data-f="'+k+'"]'),n=0;
+  els.forEach(function(el){var ok=w.every(function(x){return el.dataset.q.indexOf(x)>=0});el.classList.toggle('oculto',!ok);if(ok)n++});
+  var c=document.getElementById('qn-'+k);if(c)c.textContent=w.length?(n?n+' de '+els.length:'Nada coincide'):''}
+function filtrarTodo(){document.querySelectorAll('[data-filtro]').forEach(function(i){filtrar(i.dataset.filtro)})}
 function asigTxt(t){var a=String(t.comunidades||'').trim();if(a==='*')return'Todas las comunidades';var l=a?a.split('|').filter(function(id){return OF.com.some(function(c){return c.id===id})}):[];
   return l.length?l.map(function(id){return OF.com.find(function(c){return c.id===id}).nombre}).join(', '):''}
 function asigChecks(pref,val){var todas=String(val||'')==='*',sel=todas?[]:String(val||'').split('|');
   return'<label class="chk"><input type="checkbox" id="'+pref+'ALL"'+(todas?' checked':'')+'> <b>Todas las comunidades</b> <span class="small muted">(encargados, correturnos)</span></label>'+
-    '<div class="checks">'+OF.com.map(function(c){return'<label class="chk"><input type="checkbox" id="'+pref+c.id+'"'+(sel.indexOf(c.id)>=0?' checked':'')+'> '+esc(c.nombre)+'</label>'}).join('')+'</div>'}
+    (OF.com.length>8?buscador(pref,'Buscar comunidad…'):'')+
+    '<div class="checks">'+OF.com.map(function(c){return'<label class="chk"'+qAttr(pref,c.nombre+' '+(c.localidad||'')+' '+c.prefijo)+'><input type="checkbox" id="'+pref+c.id+'"'+(sel.indexOf(c.id)>=0?' checked':'')+'> '+esc(c.nombre)+'</label>'}).join('')+'</div>'}
 function leerAsig(pref){var all=document.getElementById(pref+'ALL');if(all&&all.checked)return'*';
   return OF.com.filter(function(c){var el=document.getElementById(pref+c.id);return el&&el.checked}).map(function(c){return c.id})}
 /* ---------- oficina: alta masiva pegando desde Excel ---------- */
@@ -555,8 +568,8 @@ function vEquipo(){
     '<button class="btn pri" style="align-self:flex-end">Dar de alta</button></form>'+
     (OF.com.length?'<div><div class="eyebrow" style="margin-bottom:6px">Comunidades en las que trabaja</div>'+asigChecks('ac-','')+'</div>':'')+
     '<p class="small muted" style="margin:0">La app le asigna un PIN de 4 cifras. Entrará con su DNI y ese PIN, y solo verá las comunidades que marques.</p></section>'+
-  '<section class="card stack"><h2 style="font-size:19px">Equipo</h2>'+(OF.trab.length?'<div class="list">'+OF.trab.map(function(t){var activo=String(t.activo).toUpperCase()!=='NO';var n=OF.rondas.filter(function(r){return r.trabajadorId===t.id&&dayOf(r.inicio)===today()}).length;
-    return'<div class="li click" data-act="trab" data-id="'+t.id+'" role="button" tabindex="0"><span class="t">'+esc(t.nombre)+' '+(activo?'':'<span class="pill p-none">De baja</span>')+(t.dni?'':'<span class="pill p-warn">Falta DNI</span>')+'</span><span class="small muted">'+(n?n+' ronda'+(n>1?'s':'')+' hoy':'')+'</span><span class="s">'+esc(t.dni||'Sin DNI')+' · '+esc(t.telefono||'Sin móvil')+' · '+(asigTxt(t)?esc(asigTxt(t)):'<b style="color:var(--pink)">Sin comunidades asignadas</b>')+'</span></div>'}).join('')+'</div>'
+  '<section class="card stack"><h2 style="font-size:19px">Equipo <span class="small muted num">('+OF.trab.length+')</span></h2>'+(OF.trab.length>8?buscador('trab','Buscar: nombre, apellido, DNI, móvil o comunidad'):'')+(OF.trab.length?'<div class="list">'+OF.trab.map(function(t){var activo=String(t.activo).toUpperCase()!=='NO';var n=OF.rondas.filter(function(r){return r.trabajadorId===t.id&&dayOf(r.inicio)===today()}).length;
+    return'<div class="li click" data-act="trab" data-id="'+t.id+'" role="button" tabindex="0"'+qAttr('trab',t.nombre+' '+(t.dni||'')+' '+(t.telefono||'')+' '+(asigTxt(t)||'sin comunidades')+(activo?'':' de baja'))+'><span class="t">'+esc(t.nombre)+' '+(activo?'':'<span class="pill p-none">De baja</span>')+(t.dni?'':'<span class="pill p-warn">Falta DNI</span>')+'</span><span class="small muted">'+(n?n+' ronda'+(n>1?'s':'')+' hoy':'')+'</span><span class="s">'+esc(t.dni||'Sin DNI')+' · '+esc(t.telefono||'Sin móvil')+' · '+(asigTxt(t)?esc(asigTxt(t)):'<b style="color:var(--pink)">Sin comunidades asignadas</b>')+'</span></div>'}).join('')+'</div>'
     :'<div class="empty"><b>Sin trabajadores</b>Da de alta a la primera persona arriba.</div>')+'</section>'+
   '<section class="card stack"><h2 style="font-size:17px">Copias de seguridad y archivo</h2>'+
     '<p class="small" style="margin:0">Cada noche se hace una copia de la hoja motor y cada domingo una copia completa con las hojas de todas las comunidades (se guardan 14 diarias y 8 semanales). Después se pasan a la hoja de cada comunidad los registros de más de '+(OF.diasArchivo||60)+' días.</p>'+
@@ -577,15 +590,17 @@ function vTrabDet(){
   '<section class="card stack"><h2 style="font-size:19px">Comunidades asignadas</h2><p class="small muted" style="margin:0">Solo podrá ver y registrar trabajo en las comunidades marcadas.</p>'+
     '<form class="stack" data-form="asig" data-id="'+t.id+'">'+(OF.com.length?asigChecks('dc-'+t.id+'-',t.comunidades):'<p class="small muted">Aún no hay comunidades creadas.</p>')+'<div><button class="btn pri">Guardar comunidades</button></div></form></section>'+
   '<section class="card stack"><h2 style="font-size:19px">Sus rondas</h2>'+listaRondas(rondas,true)+'</section>'+
-  '<section class="card stack"><h2 style="font-size:19px">Sus partes</h2>'+listaPartes(partes,true)+'</section>';
+  '<section class="card stack"><h2 style="font-size:19px">Sus partes</h2>'+listaPartes(partes,true)+'</section>'+
+  '<section class="card stack"><h2 style="font-size:17px">Eliminar trabajador</h2><p class="small muted" style="margin:0">Para quien ya no va a volver (fin de suplencia, despido…). Desaparece de la app y ya no podrá entrar. Lo que registró (rondas, partes, incidencias) se conserva con su nombre. Si puede volver, mejor «Dar de baja».</p>'+
+    '<div>'+delBtn('delTrab',t.id,'Eliminar definitivamente')+'</div></section>';
 }
 
 /* ---------- oficina: clientes (portal de consulta) ---------- */
 var SECS=[['partes','Partes de trabajo'],['rondas','Rondas'],['visitas','Visitas externas'],['incidencias','Incidencias']];
 function matrizPerm(pref,perm){perm=perm||{};
   if(!OF.com.length)return'<p class="small muted" style="margin:0">Aún no hay comunidades creadas.</p>';
-  return'<div class="matriz"><table><thead><tr><th>Comunidad</th>'+SECS.map(function(x){return'<th>'+x[1]+'</th>'}).join('')+'</tr></thead><tbody>'+
-    OF.com.map(function(c){var p=perm[c.id]||[];return'<tr><td>'+esc(c.nombre)+'</td>'+SECS.map(function(x){return'<td><input type="checkbox" id="'+pref+c.id+'-'+x[0]+'"'+(p.indexOf(x[0])>=0?' checked':'')+' aria-label="'+esc(c.nombre)+': '+x[1]+'"></td>'}).join('')+'</tr>'}).join('')+'</tbody></table></div>'}
+  return(OF.com.length>8?buscador(pref,'Buscar comunidad…'):'')+'<div class="matriz"><table><thead><tr><th>Comunidad</th>'+SECS.map(function(x){return'<th>'+x[1]+'</th>'}).join('')+'</tr></thead><tbody>'+
+    OF.com.map(function(c){var p=perm[c.id]||[];return'<tr'+qAttr(pref,c.nombre+' '+(c.localidad||'')+' '+c.prefijo)+'><td>'+esc(c.nombre)+'</td>'+SECS.map(function(x){return'<td><input type="checkbox" id="'+pref+c.id+'-'+x[0]+'"'+(p.indexOf(x[0])>=0?' checked':'')+' aria-label="'+esc(c.nombre)+': '+x[1]+'"></td>'}).join('')+'</tr>'}).join('')+'</tbody></table></div>'}
 function leerPerm(pref){var out={};OF.com.forEach(function(c){var l=SECS.filter(function(x){var el=document.getElementById(pref+c.id+'-'+x[0]);return el&&el.checked}).map(function(x){return x[0]});if(l.length)out[c.id]=l});return out}
 function resumenPerm(perm){var ks=Object.keys(perm||{}).filter(function(id){return OF.com.some(function(c){return c.id===id})});
   return ks.length?ks.map(function(id){return OF.com.find(function(c){return c.id===id}).nombre}).join(', '):''}
@@ -596,8 +611,8 @@ function vClientes(){var cl=OF.clientes||[];
     '<label class="f" style="flex:2 1 200px">Móvil (será su usuario)<input type="tel" id="clCon" placeholder="600 000 000"></label></div>'+
     '<div><div class="eyebrow" style="margin-bottom:6px">Qué puede ver en cada comunidad</div>'+matrizPerm('pn-',{})+'</div>'+
     '<div><button class="btn pri">Crear acceso</button></div></form></section>'+
-  '<section class="card stack"><h2 style="font-size:19px">Clientes con acceso</h2>'+(cl.length?'<div class="list">'+cl.map(function(c){var act=String(c.activo).toUpperCase()!=='NO',r=resumenPerm(c.permisos);
-    return'<div class="li click" data-act="cli" data-id="'+c.id+'" role="button" tabindex="0"><span class="t">'+esc(c.nombre)+' '+(act?'':'<span class="pill p-none">Sin acceso</span>')+'</span><span class="chip">'+esc(c.tipo)+'</span><span class="s">'+esc(c.contacto||'')+' · '+(r?esc(r):'<b style="color:var(--pink)">No ve ninguna comunidad</b>')+'</span></div>'}).join('')+'</div>'
+  '<section class="card stack"><h2 style="font-size:19px">Clientes con acceso</h2>'+(cl.length>8?buscador('cli','Buscar cliente: nombre, móvil o comunidad'):'')+(cl.length?'<div class="list">'+cl.map(function(c){var act=String(c.activo).toUpperCase()!=='NO',r=resumenPerm(c.permisos);
+    return'<div class="li click" data-act="cli" data-id="'+c.id+'" role="button" tabindex="0"'+qAttr('cli',c.nombre+' '+(c.contacto||'')+' '+c.tipo+' '+r)+'><span class="t">'+esc(c.nombre)+' '+(act?'':'<span class="pill p-none">Sin acceso</span>')+'</span><span class="chip">'+esc(c.tipo)+'</span><span class="s">'+esc(c.contacto||'')+' · '+(r?esc(r):'<b style="color:var(--pink)">No ve ninguna comunidad</b>')+'</span></div>'}).join('')+'</div>'
     :'<div class="empty"><b>Todavía no hay clientes</b>Crea el primero arriba y envíale su enlace.</div>')+'</section>';
 }
 function vCliDet(){var c=(OF.clientes||[]).find(function(x){return x.id===S.cliSel});if(!c){S.cliSel=null;return vClientes()}
@@ -668,6 +683,7 @@ function render(skip){
   app.innerHTML=S.view==='portal'?vPortal():S.view==='cliLogin'?vCliLogin():S.view==='login'?vLogin():S.view==='trab'?vTrab():S.view==='ofiLogin'?vOfiLogin():vOfi();
   Object.keys(vals).forEach(function(id){var el=document.getElementById(id);if(!el)return;if(el.type==='checkbox')el.checked=vals[id];else el.value=vals[id]});
   if(fid){var el=document.getElementById(fid);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(ss!=null)el.setSelectionRange(ss,se)}catch(e){}}}
+  filtrarTodo();
 }
 
 /* ---------- acciones ---------- */
@@ -719,7 +735,8 @@ var A={
   resolver:function(d){adm('resolverIncidencia',d.id).then(function(ok){if(ok)toast('Incidencia marcada como resuelta','ok')})},
   newPin:function(d){adm('cambiarTrabajador',{id:d.id,nuevoPin:true}).then(function(ok){if(ok)toast('PIN nuevo generado. Envíaselo al trabajador.','ok')})},
   baja:function(d){confirmar('baja',d.id,function(){adm('cambiarTrabajador',{id:d.id,activo:d.v==='1'})})},
-  delCom:function(d){confirmar('delCom',d.id,function(){adm('borrarComunidad',d.id).then(function(ok){if(ok){S.comSel=null;render()}})})},
+  delTrab:function(d){confirmar('delTrab',d.id,function(){adm('borrarTrabajador',d.id).then(function(ok){if(ok){S.trabSel=null;render();arriba();toast('Trabajador eliminado','ok')}})})},
+  delCom:function(d){confirmar('delCom',d.id,function(){adm('borrarComunidad',d.id).then(function(ok){if(ok){S.comSel=null;render();arriba();toast('Comunidad eliminada','ok')}})})},
   delPt:function(d){confirmar('delPt',d.id,function(){adm('borrarPunto',d.id)})},
   copy:function(d,b){var done=function(){toast('Enlace copiado','ok')};try{navigator.clipboard.writeText(d.txt).then(done,function(){selectNear(b)})}catch(e){selectNear(b)}},
   sheet:function(d){hojaEtiquetas(d.id)},
@@ -797,7 +814,8 @@ var F={
   dni2:function(f){var id=f.dataset.id;adm('cambiarTrabajador',{id:id,dni:v('dniEd-'+id)}).then(function(ok){if(ok)toast('DNI guardado','ok')})}
 };
 document.addEventListener('click',function(e){var b=e.target.closest('[data-act]');if(!b||b.disabled)return;if(e.target.closest('.detail')&&b.dataset.act==='toggle')return;e.preventDefault();if(A[b.dataset.act])A[b.dataset.act](b.dataset,b)});
-document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.li.click')){e.preventDefault();var d=e.target.dataset;if(A[d.act])A[d.act](d)}});
+document.addEventListener('input',function(e){var k=e.target.dataset&&e.target.dataset.filtro;if(k)filtrar(k)});
+document.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target.dataset&&e.target.dataset.filtro){e.preventDefault();return}if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('.li.click')){e.preventDefault();var d=e.target.dataset;if(A[d.act])A[d.act](d)}});
 document.addEventListener('submit',function(e){var f=e.target.closest('form[data-form]');if(!f)return;e.preventDefault();if(F[f.dataset.form])F[f.dataset.form](f)});
 document.addEventListener('change',function(e){var t=e.target;
   if(t.id==='pCom'){S.pCom=t.value;render('pT');return}
