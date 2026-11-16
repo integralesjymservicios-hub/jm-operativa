@@ -2,7 +2,7 @@
  * Guarda la app en el móvil para que se abra aunque no haya cobertura.
  * Al publicar una versión nueva de la app, cambia el número de VERSION.
  */
-const VERSION = 'jm-1';
+const VERSION = 'jm-4';
 const ARCHIVOS = ['./', 'index.html', 'config.js', 'qrcode.js', 'manifest.webmanifest', 'logo.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {
