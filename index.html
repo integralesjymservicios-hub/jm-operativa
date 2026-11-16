@@ -221,6 +221,13 @@ function call(fn){var args=[].slice.call(arguments,1);
   return fetch(CFG.api,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn:fn,args:args}),signal:ctl?ctl.signal:undefined,redirect:'follow'})
     .then(function(r){return r.json()}).then(function(j){clearTimeout(t);if(!j.ok)throw new Error(j.error||'Error');return j.data})
     .catch(function(e){clearTimeout(t);throw e})}
+/* Tareas de un parte: las nuevas van separadas por « | »; las antiguas, por comas (y hay tareas que llevan coma). */
+function tareasLista(s){s=String(s||'').trim();if(!s)return[];if(s.indexOf(' | ')>=0)return s.split(' | ');
+  var cand=TAREAS_DEF.slice();((OF&&OF.com)||(B&&B.com)||[]).forEach(function(c){[].concat(Array.isArray(c.tareasLista)?c.tareasLista:Array.isArray(c.tareas)?c.tareas:[]).forEach(function(t){if(cand.indexOf(t)<0)cand.push(t)})});
+  cand.sort(function(a,b){return b.length-a.length});var out=[];
+  while(s){var t=cand.find(function(c){return s.indexOf(c)===0&&(s.length===c.length||s.substr(c.length,2)===', ')});
+    if(!t){var i=s.indexOf(', ');t=i<0?s:s.slice(0,i)}out.push(t);s=s.slice(t.length).replace(/^, /,'')}
+  return out}
 function ptsOf(cid,list){return(list||(B&&B.pts)||[]).filter(function(p){return p.comunidadId===cid}).sort(function(a,b){return(a.orden||0)-(b.orden||0)})}
 function comName(cid,list){var c=(list||(B&&B.com)||[]).find(function(x){return x.id===cid});return c?c.nombre:'Comunidad'}
 
@@ -242,14 +249,17 @@ function scan(code,metodo){
   if(!RON)RON={id:newId(),comunidadId:p.comunidadId,inicio:ts,fin:null,lecturas:[]};
   RON.lecturas.push({puntoId:p.id,codigo:p.codigo,ts:ts,metodo:metodo});
   saveRon();dirty(RON);render();
+  /* Queda apuntado en el móvil al instante; el envío va por detrás y solo avisa si algo falla */
+  toast((nueva?'Ronda iniciada · ':'')+'✓ '+p.nombre+' registrado a las '+fT(ts),'ok');
+  if(navigator.vibrate)try{navigator.vibrate(60)}catch(e){}
   flush().then(function(ok){
-    if(ok)toast((nueva?'Ronda iniciada · ':'')+'✓ '+p.nombre+' registrado','ok');
-    else if(!S.qErr)toast('Sin cobertura: '+p.nombre+' guardado en el móvil a las '+fT(ts)+'. Se enviará al volver la señal.');
+    if(!ok&&S.qErr)toast(S.qErr,'bad');
+    else if(!ok)toast('Sin cobertura: '+p.nombre+' queda guardado en el móvil. Se enviará al volver la señal.');
   });
 }
 function dirty(r){OUT.rondas[r.id]=JSON.parse(JSON.stringify(r));saveOut()}
-function endRonda(){if(!RON)return;RON.fin=nowIso();dirty(RON);RON=null;saveRon();render();
-  flush().then(function(ok){toast(ok?'Ronda terminada':'Sin cobertura: la ronda queda cerrada en el móvil y se enviará al volver la señal.',ok?'ok':'')})}
+function endRonda(){if(!RON)return;RON.fin=nowIso();dirty(RON);RON=null;saveRon();render();toast('Ronda terminada','ok');
+  flush().then(function(ok){if(!ok)toast(S.qErr||'Sin cobertura: la ronda queda cerrada en el móvil y se enviará al volver la señal.',S.qErr?'bad':'')})}
 function pendientes(){return Object.keys(OUT.rondas).length+OUT.partes.length+OUT.otros.length}
 
 var flushing=null;
@@ -409,6 +419,7 @@ function vOfi(){
   if(!OF)return'<div class="card empty"><b>Cargando…</b></div>';
   if(S.tab==='equipo')return S.trabSel?vTrabDet():vEquipo();
   if(S.tab==='clientes')return S.cliSel?vCliDet():vClientes();
+  if(S.tab==='importar')return vImportar();
   return S.comSel?vComDet():vComs();
 }
 function vComs(){
@@ -438,7 +449,7 @@ function listaPartes(list,mostrarCom){
   if(!list.length)return'<div class="empty"><b>No hay partes</b>Los trabajadores los rellenan desde su móvil.</div>';
   return'<div class="list">'+list.map(function(p){var fotos=String(p.fotos||'').split('\n').filter(Boolean);
     return'<div class="li"><span class="t">'+esc(mostrarCom?p.comunidad:p.trabajador)+'</span><span class="small muted">'+fD(p.fecha)+'</span><span class="s num">'+(mostrarCom?esc(p.trabajador)+' · ':'')+esc(p.entrada||'—')+'–'+esc(p.salida||'—')+(p.horas?' · '+String(p.horas).replace('.',',')+' h':'')+'</span>'+
-      '<div style="grid-column:1/-1" class="stack">'+(p.tareas?'<div class="row" style="gap:4px">'+String(p.tareas).split(', ').map(function(t){return'<span class="chip">'+esc(t)+'</span>'}).join('')+'</div>':'')+
+      '<div style="grid-column:1/-1" class="stack">'+(p.tareas?'<div class="row" style="gap:4px">'+tareasLista(p.tareas).map(function(t){return'<span class="chip">'+esc(t)+'</span>'}).join('')+'</div>':'')+
       (p.observaciones?'<div class="banner b-info">'+esc(p.observaciones)+'</div>':'')+
       (fotos.length?'<div class="row small">'+fotos.map(function(u,i){return'<a href="'+esc(u)+'" target="_blank" rel="noopener">Foto '+(i+1)+'</a>'}).join('')+'</div>':'')+'</div></div>'}).join('')+'</div>';
 }
@@ -500,6 +511,44 @@ function asigChecks(pref,val){var todas=String(val||'')==='*',sel=todas?[]:Strin
     '<div class="checks">'+OF.com.map(function(c){return'<label class="chk"><input type="checkbox" id="'+pref+c.id+'"'+(sel.indexOf(c.id)>=0?' checked':'')+'> '+esc(c.nombre)+'</label>'}).join('')+'</div>'}
 function leerAsig(pref){var all=document.getElementById(pref+'ALL');if(all&&all.checked)return'*';
   return OF.com.filter(function(c){var el=document.getElementById(pref+c.id);return el&&el.checked}).map(function(c){return c.id})}
+/* ---------- oficina: alta masiva pegando desde Excel ---------- */
+function filasPegadas(txt,minCols){
+  var l=String(txt||'').split(/\r?\n/).map(function(x){return x.replace(/\s+$/,'')}).filter(function(x){return x.trim()});
+  var out=l.map(function(x){var c=x.indexOf('\t')>=0?x.split('\t'):x.split(';');
+    if(c.length>minCols&&x.indexOf('\t')<0)c=c.slice(0,minCols-1).concat([c.slice(minCols-1).join(';')]);
+    return c.map(function(v){return v.trim().replace(/^"(.*)"$/,'$1').trim()})});
+  if(out.length&&/^(nombre|comunidad|trabajador|direcci)/i.test(out[0][0]||''))out.shift();   // fila de títulos
+  return out}
+function impLista(l,tipo){
+  if(!l.length)return'';
+  return'<div class="list">'+l.map(function(r){
+    var est=r.error?'<span class="pill p-bad">'+esc(r.error)+'</span>':r.omitida?'<span class="pill p-none">'+esc(r.omitida)+': no se toca</span>':'<span class="pill p-ok">'+(S.impHecho?'Dado de alta':'Nueva')+'</span>';
+    var det=tipo==='c'?[r.prefijo?'Prefijo <span class="code">'+esc(r.prefijo)+'</span>':'',esc(r.localidad||'')].filter(Boolean).join(' · ')
+      :esc(r.dni||'')+(r.telefono?' · '+esc(r.telefono):'')+(r.ok?' · '+(r.comunidades?esc(r.comunidades):'<b style="color:var(--pink)">sin comunidades</b>'):'')+(r.pin?' · PIN <b class="mono">'+esc(r.pin)+'</b>':'');
+    return'<div class="li"><span class="t">'+esc(r.nombre||'(fila '+r.fila+' sin nombre)')+'</span>'+est+'<span class="s">'+det+
+      ((r.avisos||[]).length?'<br><span style="color:var(--pink)">⚠ '+r.avisos.map(esc).join(' · ')+'</span>':'')+'</span></div>'}).join('')+'</div>'}
+function vImportar(){
+  var R=S.imp,h='<section class="card stack"><div><div class="eyebrow">Alta masiva</div><h2 style="font-size:19px">Dar de alta muchas comunidades y trabajadores de golpe</h2></div>'+
+    '<p class="small" style="margin:0">Selecciona las filas en Excel o Google Sheets, cópialas y pégalas en cada cuadro (si pegas también la fila de títulos, se ignora). Primero pulsa <b>Revisar</b>: no se da de alta nada hasta que lo confirmes. Lo que ya exista no se toca.</p></section>'+
+    '<section class="card stack"><h3 style="font-size:17px;color:var(--brand)">1 · Comunidades</h3>'+
+    '<p class="small muted" style="margin:0">Columnas, en este orden: <b>Nombre</b> · <b>Localidad</b> · <b>Prefijo</b> (opcional; si lo dejas vacío se pone solo, por ejemplo «C/ Mayor 12» → MAY12).</p>'+
+    '<textarea id="imC" rows="6" class="mono" placeholder="C/ Mayor 12&#9;Parla&#9;MAY12&#10;Residencial Los Olivos&#9;Getafe"></textarea></section>'+
+    '<section class="card stack"><h3 style="font-size:17px;color:var(--brand)">2 · Trabajadores</h3>'+
+    '<p class="small muted" style="margin:0">Columnas, en este orden: <b>Nombre y apellidos</b> · <b>DNI o NIE</b> · <b>Móvil</b> · <b>Comunidades</b> en las que trabaja, separadas por punto y coma (vale el nombre, un trozo claro del nombre o el prefijo). Para encargados y correturnos escribe <b>todas</b>. El PIN lo pone la app.</p>'+
+    '<textarea id="imT" rows="8" class="mono" placeholder="Ana López Ruiz&#9;12345678Z&#9;600111222&#9;Mayor 12; Los Olivos&#10;Pedro Gil Sanz&#9;X1234567L&#9;600333444&#9;todas"></textarea>'+
+    '<div class="row"><button class="btn pri" data-act="imRev" '+(S.busy?'disabled':'')+'>Revisar</button>'+(R?'<button class="btn ghost" data-act="imBorrar">Empezar de nuevo</button>':'')+'</div></section>';
+  if(!R)return h;
+  var nc=R.nuevasC,nt=R.nuevosT,err=R.comunidades.concat(R.trabajadores).filter(function(r){return r.error}).length;
+  h+='<section class="card stack"><h2 style="font-size:19px">'+(S.impHecho?'Hecho: '+nc+' comunidad'+(nc===1?'':'es')+' y '+nt+' trabajador'+(nt===1?'':'es')+' dados de alta':'Revisión: '+nc+' comunidad'+(nc===1?'':'es')+' y '+nt+' trabajador'+(nt===1?'':'es')+' nuevos')+'</h2>'+
+    (err&&!S.impHecho?'<div class="banner b-warn">Hay '+err+' fila'+(err===1?'':'s')+' con error (en rojo). Esas no se darán de alta: corrígelas en el cuadro y vuelve a revisar, o sigue y añádelas después.</div>':'')+
+    (S.impHecho?'<p class="small" style="margin:0">Las hojas de cálculo de las comunidades nuevas se van creando solas en los próximos minutos. Los PIN aparecen abajo y en la ficha de cada trabajador (pestaña Equipo), desde donde puedes mandarle su acceso por WhatsApp.</p>'+
+      (R.trabajadores.some(function(r){return r.pin})?'<div class="row"><button class="btn pri" data-act="imCopiar">Copiar accesos (para pegar en Excel)</button><span class="u" style="position:absolute;left:-9999px">'+esc(accesosTxt(R))+'</span></div>':'')
+     :(nc||nt?'<div class="row"><button class="btn pink" data-act="imOk" '+(S.busy?'disabled':'')+'>Dar de alta '+(nc?nc+' comunidad'+(nc===1?'':'es'):'')+(nc&&nt?' y ':'')+(nt?nt+' trabajador'+(nt===1?'':'es'):'')+'</button></div>':'<p class="small muted" style="margin:0">No hay nada nuevo que dar de alta.</p>'))+
+    (R.comunidades.length?'<div><div class="eyebrow">Comunidades</div>'+impLista(R.comunidades,'c')+'</div>':'')+
+    (R.trabajadores.length?'<div><div class="eyebrow">Trabajadores</div>'+impLista(R.trabajadores,'t')+'</div>':'')+'</section>';
+  return h}
+function accesosTxt(R){return['Nombre\tDNI\tMóvil\tPIN'].concat(R.trabajadores.filter(function(r){return r.pin}).map(function(r){return[r.nombre,r.dni,r.telefono,r.pin].join('\t')})).join('\n')}
+function impDatos(){return{comunidades:filasPegadas(v('imC'),3),trabajadores:filasPegadas(v('imT'),4)}}
 function vEquipo(){
   return'<section class="card stack"><h2 style="font-size:19px">Dar de alta a un trabajador</h2><form class="row" data-form="trab" autocomplete="off">'+
     '<label class="f" style="flex:2 1 200px">Nombre y apellidos<input type="text" id="tNom" placeholder="Nombre y apellidos"></label><label class="f">DNI o NIE<input type="text" id="tDni" placeholder="12345678Z" class="mono" style="text-transform:uppercase"></label><label class="f">Móvil<input type="tel" id="tTel" placeholder="600 000 000"></label>'+
@@ -595,7 +644,7 @@ function pFotos(key,ids){if(!ids||!ids.length)return'';var f=FOTOS[key];
   return'<div class="fotos-p">'+f.map(function(src){return src?'<img src="'+src+'" alt="Foto" data-act="zoom">':''}).join('')+'</div>'}
 function pPartes(l){if(!l.length)return'<div class="empty"><b>Sin partes de trabajo todavía</b></div>';
   return'<div class="list">'+l.map(function(p){return'<div class="li"><span class="t">'+fD(p.fecha)+'</span><span class="small muted num">'+esc(p.entrada||'')+(p.salida?'–'+esc(p.salida):'')+'</span><span class="s">'+esc(p.trabajador)+'</span>'+
-    '<div style="grid-column:1/-1" class="stack">'+(p.tareas?'<div class="row" style="gap:4px">'+String(p.tareas).split(', ').map(function(t){return'<span class="chip">'+esc(t)+'</span>'}).join('')+'</div>':'')+(p.obs?'<div class="banner b-info">'+esc(p.obs)+'</div>':'')+pFotos('p'+p.id,p.fotos)+'</div></div>'}).join('')+'</div>'}
+    '<div style="grid-column:1/-1" class="stack">'+(p.tareas?'<div class="row" style="gap:4px">'+tareasLista(p.tareas).map(function(t){return'<span class="chip">'+esc(t)+'</span>'}).join('')+'</div>':'')+(p.obs?'<div class="banner b-info">'+esc(p.obs)+'</div>':'')+pFotos('p'+p.id,p.fotos)+'</div></div>'}).join('')+'</div>'}
 function pRondas(l){if(!l.length)return'<div class="empty"><b>Sin rondas todavía</b></div>';
   return'<div class="list">'+l.map(function(r){var o=S.open[r.id];
     return'<div class="li click" data-act="toggle" data-id="'+r.id+'" role="button" tabindex="0"><span class="t">'+fD(r.dia)+'</span><span>'+estadoPill(r)+'</span><span class="s num">'+esc(r.inicio)+(r.fin?'–'+esc(r.fin):'')+' · '+esc(r.trabajador)+' · Pulse para ver los puntos</span>'+
@@ -615,7 +664,7 @@ function render(skip){
   tr.innerHTML=S.view==='portal'?'<button class="btn ghost small" data-act="salirCli">Salir</button>':S.view==='trab'&&SES?'<button class="btn ghost small" data-act="salir">'+esc(SES.nombre)+' · Salir</button>':S.view==='ofi'?'<button class="btn ghost small" data-act="salirOfi">Salir de oficina</button>':'';
   document.getElementById('sub').textContent=S.view==='ofi'?'Oficina':S.view==='portal'||S.view==='cliLogin'?'Área de clientes':'Rondas y partes de trabajo';
   tb.hidden=S.view!=='ofi';
-  if(S.view==='ofi')tb.innerHTML='<nav class="tabs">'+[['comunidades','Comunidades'],['equipo','Equipo'],['clientes','Clientes']].map(function(x){return'<button data-act="tab" data-v="'+x[0]+'" '+(S.tab===x[0]?'aria-current="page"':'')+'>'+x[1]+'</button>'}).join('')+'</nav>';
+  if(S.view==='ofi')tb.innerHTML='<nav class="tabs">'+[['comunidades','Comunidades'],['equipo','Equipo'],['clientes','Clientes'],['importar','Alta masiva']].map(function(x){return'<button data-act="tab" data-v="'+x[0]+'" '+(S.tab===x[0]?'aria-current="page"':'')+'>'+x[1]+'</button>'}).join('')+'</nav>';
   app.innerHTML=S.view==='portal'?vPortal():S.view==='cliLogin'?vCliLogin():S.view==='login'?vLogin():S.view==='trab'?vTrab():S.view==='ofiLogin'?vOfiLogin():vOfi();
   Object.keys(vals).forEach(function(id){var el=document.getElementById(id);if(!el)return;if(el.type==='checkbox')el.checked=vals[id];else el.value=vals[id]});
   if(fid){var el=document.getElementById(fid);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(ss!=null)el.setSelectionRange(ss,se)}catch(e){}}}
@@ -673,7 +722,19 @@ var A={
   delCom:function(d){confirmar('delCom',d.id,function(){adm('borrarComunidad',d.id).then(function(ok){if(ok){S.comSel=null;render()}})})},
   delPt:function(d){confirmar('delPt',d.id,function(){adm('borrarPunto',d.id)})},
   copy:function(d,b){var done=function(){toast('Enlace copiado','ok')};try{navigator.clipboard.writeText(d.txt).then(done,function(){selectNear(b)})}catch(e){selectNear(b)}},
-  sheet:function(d){hojaEtiquetas(d.id)}
+  sheet:function(d){hojaEtiquetas(d.id)},
+  imRev:function(){var d=impDatos();if(!d.comunidades.length&&!d.trabajadores.length){toast('Pega primero las filas copiadas de Excel.','bad');return}
+    S.busy=true;S.impHecho=false;render();
+    call('importar',{admin:true,pin:ADM},d,true).then(function(r){S.busy=false;S.imp=r;render()}).catch(function(e){S.busy=false;render();toast(appMsg(e)||'Sin conexión. La oficina necesita señal.','bad')})},
+  imOk:function(){var d=impDatos();S.busy=true;render();
+    call('importar',{admin:true,pin:ADM},d,false).then(function(r){S.busy=false;S.imp=r;S.impHecho=true;var det=OF&&OF.det;OF=r.oficina;OF.det=det;
+      /* En los cuadros se quedan solo las filas con error, para corregirlas y volver a revisar */
+      var malas=function(l,res){return l.filter(function(x,i){return res[i]&&res[i].error}).map(function(x){return x.join('\t')}).join('\n')};
+      render('im');var c=document.getElementById('imC'),t=document.getElementById('imT');if(c)c.value=malas(d.comunidades,r.comunidades);if(t)t.value=malas(d.trabajadores,r.trabajadores);
+      toast('Alta masiva hecha','ok')})
+    .catch(function(e){S.busy=false;render();toast(appMsg(e)||'Sin conexión. La oficina necesita señal.','bad')})},
+  imBorrar:function(){S.imp=null;S.impHecho=false;var c=document.getElementById('imC'),t=document.getElementById('imT');if(c)c.value='';if(t)t.value='';render('im')},
+  imCopiar:function(d,b){var t=accesosTxt(S.imp),done=function(){toast('Accesos copiados: pégalos en una hoja de Excel','ok')};try{navigator.clipboard.writeText(t).then(done,function(){selectNear(b)})}catch(e){selectNear(b)}}
 };
 function selectNear(b){var u=b.parentNode.querySelector('.u');if(u){var r=document.createRange();r.selectNodeContents(u);var s=getSelection();s.removeAllRanges();s.addRange(r);toast('Enlace seleccionado: cópialo con el menú del móvil.')}}
 function confirmar(act,id,fn){var k=act+':'+id;if(S.confirm!==k){S.confirm=k;render();setTimeout(function(){if(S.confirm===k){S.confirm=null;render()}},4000);return}S.confirm=null;fn()}
